@@ -15,6 +15,8 @@
 #include <cmath>
 #include <random>
 
+#include "myposix.h"
+
 using namespace leveldb;
 using namespace adgMod;
 using std::string;
@@ -135,6 +137,8 @@ int main(int argc, char *argv[]) {
         printf("%s", commandline_options.help().c_str());
         exit(0);
     }
+
+    init_tiering_lib();
 
     std::default_random_engine e1(0), e2(255), e3(0);
     srand(0);
@@ -330,6 +334,7 @@ int main(int argc, char *argv[]) {
                 adgMod::key_size = (int) keys.front().size();
             }
             fresh_write = false;
+            end_tiering_lib();
             return 0;
         }
 
@@ -556,4 +561,7 @@ int main(int argc, char *argv[]) {
             printf("Timer %d MEAN: %lu, STDDEV: %f\n", s, (uint64_t) mean, stdev);
         }
     }
+
+    end_tiering_lib();
+
 }

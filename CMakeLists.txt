@@ -311,6 +311,12 @@ add_executable(leveldbutil
 )
 target_link_libraries(leveldbutil leveldb)
 
+#add myposix library
+find_library(MY_POSIX NAMES libmyposix.so)
+target_link_libraries(leveldb ${MY_POSIX})
+
+
+
 if(LEVELDB_BUILD_TESTS)
   enable_testing()
 

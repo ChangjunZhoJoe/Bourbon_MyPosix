@@ -40,6 +40,8 @@
 #include "mod/Vlog.h"
 #include <x86intrin.h>
 
+#include "myposix.h"
+
 namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
@@ -779,6 +781,7 @@ void DBImpl::BackgroundCompaction() {
   instance->StartTimer(7);
 
   if (imm_ != nullptr) {
+    registerThread(pthread_self(),THREAD_FLUSH);
     int level = CompactMemTable();
     instance->PauseTimer(7);
     return;
@@ -835,6 +838,7 @@ void DBImpl::BackgroundCompaction() {
         status.ToString().c_str(), versions_->LevelSummary(&tmp));
   } else {
     CompactionState* compact = new CompactionState(c);
+    registerStartCompaction(pthread_self(),c->level());
     status = DoCompactionWork(compact);
     if (!status.ok()) {
       RecordBackgroundError(status);
@@ -878,13 +882,6 @@ void DBImpl::BackgroundCompaction() {
     } else {
         instance->PauseTimer(7);
     }
-
-
-
-
-
-
-
 
   delete c;
 
