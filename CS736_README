@@ -94,7 +94,7 @@ and writes). Re-compile with the following:
 ```
 cd build
 rm -rf *
-cmake /path/to/bourbon -DCMAKE_BUILD_TYPE=RELEASE \
+cmake /data/czhou/Bourbon -DCMAKE_BUILD_TYPE=RELEASE \
     -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
 make -j
 ```

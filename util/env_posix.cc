@@ -42,6 +42,8 @@
 #include "mod/learned_index.h"
 
 #include "myposix.h"
+#include <pthread.h>
+#include <iostream>
 
 namespace leveldb {
 
@@ -109,13 +111,20 @@ class Limiter {
 class PosixSequentialFile final : public SequentialFile {
  public:
   PosixSequentialFile(std::string filename, int fd)
-      : fd_(fd), filename_(filename) {}
-  ~PosixSequentialFile() override { my_close(fd_); }
+      : fd_(fd), filename_(filename) {
+            // int threadtype = getThreadType(pthread_self());
+            // std::cout << "My_Posix: In function PosixSequentialFile Constructor, getThreadType return "<<threadtype << std::endl;
+      }
+  ~PosixSequentialFile() override { close(fd_); }
 
   Status Read(size_t n, Slice* result, char* scratch) override {
+
+    // int threadtype = getThreadType(pthread_self());
+    // std::cout << "My_Posix: In function PosixSequentialFile Read(), getThreadType return "<<threadtype << std::endl;
+
     Status status;
     while (true) {
-      ::ssize_t read_size = my_read(fd_, scratch, n);
+      ::ssize_t read_size = ::read(fd_, scratch, n);
       if (read_size < 0) {  // Read error.
         if (errno == EINTR) {
           continue;  // Retry
@@ -171,6 +180,12 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {
+
+  
+    auto threadtype = getThreadType(pthread_self());
+    std::cout << "My_Posix: In function PosixRandomAccessFile Read(), getThreadType return "<<threadtype << std::endl;
+    
+    
     int fd = fd_;
     if (!has_permanent_fd_) {
       fd = ::open(filename_.c_str(), O_RDONLY);
@@ -499,36 +514,7 @@ class PosixEnv : public Env {
 
   Status NewSequentialFile(const std::string& filename,
                            SequentialFile** result) override {
-    int fd;
-    int fileType = isSSTorWal(fname);
-    if (fileType != 0) {
-
-      bool is_pmem = false;
-      FileAccessType access_type;
-
-      device_type device;
-      std::string actualPath = fileActualPath(fname, device);
-      //since it is a randomaccessfile, either it is an sst file or
-      //something not important
-      if (fileType == 1) {//SST //impossible
-        access_type = SST_Read;
-      } else {
-        access_type = WAL_Read;
-      }
-
-      if (device != SSD) {
-        is_pmem = true;
-      }
-
-      fd = my_open(filename.c_str(), O_RDONLY,flags,
-          GetDBFileMode(allow_non_owner_access_),
-          std::make_shared<Context>(access_type, is_pmem)
-        );
-    } else {
-      fd = ::open(filename.c_str(), O_RDONLY);
-    }
-
-
+    int fd = ::open(filename.c_str(), O_RDONLY);
     if (fd < 0) {
       *result = nullptr;
       return PosixError(filename, errno);
