@@ -1,0 +1,5 @@
+cd ./build
+sudo rm -rf *
+cmake /data/czhou/Bourbon -DCMAKE_BUILD_TYPE=DEBUG \
+    -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
+sudo make -j

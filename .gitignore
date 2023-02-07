@@ -9,3 +9,6 @@ cmake-*
 # Build directory.
 build/
 out/
+
+testdatasets/keyfile.txt
+testdatasets/testdatasets

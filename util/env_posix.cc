@@ -112,15 +112,15 @@ class PosixSequentialFile final : public SequentialFile {
  public:
   PosixSequentialFile(std::string filename, int fd)
       : fd_(fd), filename_(filename) {
-            // int threadtype = getThreadType(pthread_self());
-            // std::cout << "My_Posix: In function PosixSequentialFile Constructor, getThreadType return "<<threadtype << std::endl;
+            int threadtype = getThreadType(pthread_self());
+            std::cout << "My_Posix: In function PosixSequentialFile Constructor, getThreadType return "<<threadtype <<"ID: "<< pthread_self()<< std::endl;
       }
   ~PosixSequentialFile() override { close(fd_); }
 
   Status Read(size_t n, Slice* result, char* scratch) override {
 
-    // int threadtype = getThreadType(pthread_self());
-    // std::cout << "My_Posix: In function PosixSequentialFile Read(), getThreadType return "<<threadtype << std::endl;
+    int threadtype = getThreadType(pthread_self());
+    std::cout << "My_Posix: In function PosixSequentialFile Read(), getThreadType return "<<threadtype<< "ID: "<< pthread_self()<< std::endl;
 
     Status status;
     while (true) {
@@ -279,6 +279,9 @@ class PosixWritableFile final : public WritableFile {
   }
 
   Status Append(const Slice& data) override {
+
+    int threadtype = getThreadType(pthread_self());
+    std::cout << "PosixWritableFile Append(), threadtype: "<<threadtype << "ID: "<< pthread_self()<< std::endl;
     size_t write_size = data.size();
     const char* write_data = data.data();
 
