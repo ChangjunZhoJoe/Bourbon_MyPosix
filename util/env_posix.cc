@@ -281,7 +281,7 @@ class PosixWritableFile final : public WritableFile {
   Status Append(const Slice& data) override {
 
     int threadtype = getThreadType(pthread_self());
-    std::cout << "PosixWritableFile Append(), threadtype: "<<threadtype << "ID: "<< pthread_self()<< std::endl;
+    std::cout << "PosixWritableFile Append(), threadtype: "<<threadtype << "ID: "<< pthread_self() << "fname: " << filename_ << std::endl;
     size_t write_size = data.size();
     const char* write_data = data.data();
 
@@ -599,6 +599,9 @@ class PosixEnv : public Env {
     } else {
         fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT, 0644);
     }
+
+    int threadtype = getThreadType(pthread_self());
+    std::cout << "PosixWritableFile opened, threadtype: "<<threadtype << "ID: "<< pthread_self()<< std::endl;
 
     if (fd < 0) {
       *result = nullptr;

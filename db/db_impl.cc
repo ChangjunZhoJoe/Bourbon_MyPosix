@@ -157,6 +157,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)),
       version_count(0) {
+        std::cout <<"DBImpl constructor, thread:  "<<pthread_self()<<std::endl;
         adgMod::db = this;
         vlog = new adgMod::VLog(dbname_ + "/vlog.txt");
       }
@@ -732,6 +733,7 @@ void DBImpl::RecordBackgroundError(const Status& s) {
 }
 
 void DBImpl::MaybeScheduleCompaction() {
+  std::cout <<"MaybeScheduleCompaction, thread:  "<<pthread_self()<<std::endl;
   mutex_.AssertHeld();
   if (background_compaction_scheduled_) {
     // Already scheduled
