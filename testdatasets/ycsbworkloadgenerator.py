@@ -1,9 +1,10 @@
 import random
 import string
 
-
-number_of_keys = 3000000
-number_of_operation_multiplier = 4
+# number_of_keys = 30000 # 300, -n 57
+# number_of_keys = 3000000 # 3 million, -n 2920
+number_of_keys = 100000000 # 100 million, -n 97500
+# number_of_keys = 10000000 # 10 million, -n 19531
 def get_random_string(length):
     # choose from all lowercase letter
     letters = string.ascii_lowercase
@@ -21,11 +22,16 @@ f.writelines(keys)
 f.close()
 
 f = open("ycsbworkload.txt", "a")
-whichKey = []
+ycsbops = []
+existingKeys = []
 for i in range(1,number_of_keys-1):
-    whichKey.append("1 "+ str(i) + "\n")
+    if(i < 1000 or i%2 == 0):
+        ycsbops.append("1 "+ str(i) + "\n")
+        existingKeys.append(str(i))
+    else:
+        ycsbops.append("0 "+random.choice(existingKeys)+"\n")
+    
 
-print(len(whichKey))
-for i in range(number_of_operation_multiplier):
-    f.writelines(whichKey)
+print("total operations: ", len(ycsbops))
+f.writelines(ycsbops)
 f.close()

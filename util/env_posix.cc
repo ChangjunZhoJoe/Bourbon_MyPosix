@@ -113,18 +113,22 @@ class PosixSequentialFile final : public SequentialFile {
   PosixSequentialFile(std::string filename, int fd)
       : fd_(fd), filename_(filename) {
             int threadtype = getThreadType(pthread_self());
-            std::cout << "My_Posix: In function PosixSequentialFile Constructor, getThreadType return "<<threadtype <<"ID: "<< pthread_self()<< std::endl;
+            //std::cout << "My_Posix: In function PosixSequentialFile Constructor, getThreadType return "<<threadtype <<"ID: "<< pthread_self()<< std::endl;
       }
   ~PosixSequentialFile() override { close(fd_); }
 
   Status Read(size_t n, Slice* result, char* scratch) override {
 
     int threadtype = getThreadType(pthread_self());
-    std::cout << "My_Posix: In function PosixSequentialFile Read(), getThreadType return "<<threadtype<< "ID: "<< pthread_self()<< std::endl;
+    //std::cout << "My_Posix: In function PosixSequentialFile Read(), getThreadType return "<<threadtype<< "ID: "<< pthread_self()<< std::endl;
 
     Status status;
     while (true) {
-      ::ssize_t read_size = ::read(fd_, scratch, n);
+      //myposix
+      
+      ::ssize_t read_size = my_read(fd_, scratch, n);
+      // ::ssize_t read_size = ::read(fd_, scratch, n);
+
       if (read_size < 0) {  // Read error.
         if (errno == EINTR) {
           continue;  // Retry
@@ -139,7 +143,8 @@ class PosixSequentialFile final : public SequentialFile {
   }
 
   Status Skip(uint64_t n) override {
-    if (::lseek(fd_, n, SEEK_CUR) == static_cast<off_t>(-1)) {
+    //myposix
+    if (my_lseek(fd_, n, SEEK_CUR) == static_cast<off_t>(-1)) {
       return PosixError(filename_, errno);
     }
     return Status::OK();
@@ -183,12 +188,41 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 
   
     auto threadtype = getThreadType(pthread_self());
-    std::cout << "My_Posix: In function PosixRandomAccessFile Read(), getThreadType return "<<threadtype << std::endl;
+    //std::cout << "My_Posix: In function PosixRandomAccessFile Read(), getThreadType return "<<threadtype << std::endl;
     
     
     int fd = fd_;
     if (!has_permanent_fd_) {
-      fd = ::open(filename_.c_str(), O_RDONLY);
+      //myposix
+      int fileType = isSSTorWal(filename_);
+      if (fileType != 0) {
+
+        bool is_pmem = false;
+        FileAccessType access_type;
+
+        device_type device;
+        std::string actualPath = fileActualPath(filename_, device);
+        //since it is a randomaccessfile, either it is an sst file or
+        //something not important
+        //czhou: concerns: maybe bourbon use randomaccessfile to do something important?
+        if (fileType == 1) {//SST //impossible
+          access_type = SST_Read;
+        } else {
+          access_type = WAL_Read;
+        }
+
+        if (device != SSD) {
+          is_pmem = true;
+        }
+
+        fd = my_open(actualPath.c_str(), O_RDONLY, 0777, 
+          std::make_shared<Context>(access_type, is_pmem)
+        );
+      } else {
+        fd = ::open(filename_.c_str(), O_RDONLY);
+      }
+
+      // fd = ::open(filename_.c_str(), O_RDONLY);
       if (fd < 0) {
         return PosixError(filename_, errno);
       }
@@ -197,7 +231,9 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     assert(fd != -1);
 
     Status status;
-    ssize_t read_size = ::pread(fd, scratch, n, static_cast<off_t>(offset));
+    //myposix
+    ssize_t read_size = my_pread(fd, scratch, n, static_cast<off_t>(offset));
+    // ssize_t read_size = ::pread(fd, scratch, n, static_cast<off_t>(offset));
     *result = Slice(scratch, (read_size < 0) ? 0 : read_size);
     if (read_size < 0) {
       // An error: return a non-ok status.
@@ -206,7 +242,9 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     if (!has_permanent_fd_) {
       // Close the temporary file descriptor opened earlier.
       assert(fd != fd_);
-      ::close(fd);
+      //myposix
+      my_close(fd);
+      // ::close(fd);
     }
     return status;
   }
@@ -274,6 +312,7 @@ class PosixWritableFile final : public WritableFile {
   ~PosixWritableFile() override {
     if (fd_ >= 0) {
       // Ignoring any potential errors
+      //myposix
       Close();
     }
   }
@@ -281,7 +320,7 @@ class PosixWritableFile final : public WritableFile {
   Status Append(const Slice& data) override {
 
     int threadtype = getThreadType(pthread_self());
-    std::cout << "PosixWritableFile Append(), threadtype: "<<threadtype << "ID: "<< pthread_self() << "fname: " << filename_ << std::endl;
+    //std::cout << "PosixWritableFile Append(), threadtype: "<<threadtype << "ID: "<< pthread_self() << "fname: " << filename_ << std::endl;
     size_t write_size = data.size();
     const char* write_data = data.data();
 
@@ -312,7 +351,9 @@ class PosixWritableFile final : public WritableFile {
 
   Status Close() override {
     Status status = FlushBuffer();
-    const int close_result = ::close(fd_);
+    //myposix
+    const int close_result = my_close(fd_);
+    // const int close_result = ::close(fd_);
     if (close_result < 0 && status.ok()) {
       status = PosixError(filename_, errno);
     }
@@ -328,15 +369,23 @@ class PosixWritableFile final : public WritableFile {
     // This needs to happen before the manifest file is flushed to disk, to
     // avoid crashing in a state where the manifest refers to files that are not
     // yet on disk.
+    //std::cout << "PosixWritableFile Sync(), fname: " << filename_ << std::endl;
     Status status = SyncDirIfManifest();
+    //std::cout << "PosixWritableFile Sync()2, fname: " << filename_ << " status: " << status.ToString() << std::endl;
     if (!status.ok()) {
       return status;
     }
 
+    //std::cout << "PosixWritableFile Sync()3, fname: " << filename_ << std::endl;
+
     status = FlushBuffer();
+
+    //std::cout << "PosixWritableFile Sync()4, fname: " << filename_ << " status: " << status.ToString() << std::endl;
     if (!status.ok()) {
       return status;
     }
+
+    //std::cout << "PosixWritableFile Sync()5, fname: " << filename_ << std::endl;
 
     return SyncFd(fd_, filename_);
   }
@@ -350,7 +399,9 @@ class PosixWritableFile final : public WritableFile {
 
   Status WriteUnbuffered(const char* data, size_t size) {
     while (size > 0) {
-      ssize_t write_result = ::write(fd_, data, size);
+      //myposix
+      ssize_t write_result = my_write(fd_, data, size);
+      // ssize_t write_result = ::write(fd_, data, size);
       if (write_result < 0) {
         if (errno == EINTR) {
           continue;  // Retry
@@ -369,12 +420,44 @@ class PosixWritableFile final : public WritableFile {
       return status;
     }
 
-    int fd = ::open(dirname_.c_str(), O_RDONLY);
+    //myposix
+    int fileType = isSSTorWal(dirname_);
+    int fd;
+    if (fileType != 0) {
+
+      bool is_pmem = false;
+      FileAccessType access_type;
+
+      Context *ctx;
+      device_type device;
+      std::string actualPath = fileActualPath(dirname_, device);
+
+      //since it is a writable, either it is an sst file or
+      //a wal writable file
+      if (fileType == 1) {//SST
+        access_type = SST_Write;
+      } else { //WAL
+        access_type = WAL_Write;
+      }
+
+      if (device != SSD) {
+        is_pmem = true;
+      }
+
+      fd = my_open(actualPath.c_str(), O_RDONLY, 0777, 
+        std::make_shared<Context>(access_type, is_pmem)
+      );
+    } else {
+      fd = open(dirname_.c_str(), O_RDONLY);
+    }
+    // int fd = ::open(dirname_.c_str(), O_RDONLY);
     if (fd < 0) {
       status = PosixError(dirname_, errno);
     } else {
       status = SyncFd(fd, dirname_);
-      ::close(fd);
+      //myposix
+      my_close(fd);
+      // ::close(fd);
     }
     return status;
   }
@@ -391,15 +474,23 @@ class PosixWritableFile final : public WritableFile {
     // failures. fcntl(F_FULLFSYNC) is required for that purpose. Some
     // filesystems don't support fcntl(F_FULLFSYNC), and require a fallback to
     // fsync().
-    if (::fcntl(fd, F_FULLFSYNC) == 0) {
+    //myposix
+    if (my_fcntl(fd, F_FULLFSYNC) == 0) {
       return Status::OK();
     }
+    // if (::fcntl(fd, F_FULLFSYNC) == 0) {
+    //   return Status::OK();
+    // }
 #endif  // HAVE_FULLFSYNC
 
 #if HAVE_FDATASYNC
-    bool sync_success = ::fdatasync(fd) == 0;
+//myposix
+    bool sync_success = my_fdatasync(fd) == 0;
+    // bool sync_success = ::fdatasync(fd) == 0;
 #else
-    bool sync_success = ::fsync(fd) == 0;
+//myposix
+    bool sync_success = my_fsync(fd) == 0;
+    // bool sync_success = ::fsync(fd) == 0;
 #endif  // HAVE_FDATASYNC
 
     if (sync_success) {
@@ -411,6 +502,7 @@ class PosixWritableFile final : public WritableFile {
   // Returns the directory name in a path pointing to a file.
   //
   // Returns "." if the path does not contain any directory separator.
+  //myposix? didn't modify
   static std::string Dirname(const std::string& filename) {
     std::string::size_type separator_pos = filename.rfind('/');
     if (separator_pos == std::string::npos) {
@@ -427,6 +519,7 @@ class PosixWritableFile final : public WritableFile {
   //
   // The returned Slice points to |filename|'s data buffer, so it is only valid
   // while |filename| is alive and unchanged.
+  //myposix? didn't modify
   static Slice Basename(const std::string& filename) {
     std::string::size_type separator_pos = filename.rfind('/');
     if (separator_pos == std::string::npos) {
@@ -463,7 +556,9 @@ int LockOrUnlock(int fd, bool lock) {
   file_lock_info.l_whence = SEEK_SET;
   file_lock_info.l_start = 0;
   file_lock_info.l_len = 0;  // Lock/unlock entire file.
-  return ::fcntl(fd, F_SETLK, &file_lock_info);
+  //myposix
+  return my_fcntl(fd, F_SETLK, &file_lock_info);
+  // return ::fcntl(fd, F_SETLK, &file_lock_info);
 }
 
 // Instances are thread-safe because they are immutable.
@@ -517,7 +612,35 @@ class PosixEnv : public Env {
 
   Status NewSequentialFile(const std::string& filename,
                            SequentialFile** result) override {
-    int fd = ::open(filename.c_str(), O_RDONLY);
+    //myposix
+    int fileType = isSSTorWal(filename);
+    int fd;
+    if (fileType != 0) {
+
+      bool is_pmem = false;
+      FileAccessType access_type;
+
+      device_type device;
+      std::string actualPath = fileActualPath(filename, device);
+      //since it is a randomaccessfile, either it is an sst file or
+      //something not important
+      if (fileType == 1) {//SST //impossible
+        access_type = SST_Read;
+      } else {
+        access_type = WAL_Read;
+      }
+
+      if (device != SSD) {
+        is_pmem = true;
+      }
+
+      fd = my_open(actualPath.c_str(), O_RDONLY, 0777, 
+        std::make_shared<Context>(access_type, is_pmem)
+      );
+    } else {
+      fd = open(filename.c_str(), O_RDONLY);
+    }
+    // int fd = ::open(filename.c_str(), O_RDONLY);
     if (fd < 0) {
       *result = nullptr;
       return PosixError(filename, errno);
@@ -531,21 +654,55 @@ class PosixEnv : public Env {
                              RandomAccessFile** result) override {
 
     *result = nullptr;
-    int fd = ::open(filename.c_str(), O_RDONLY);
+    //myposix
+    int fileType = isSSTorWal(filename);
+    int fd;
+    if (fileType != 0) {
+
+      bool is_pmem = false;
+      FileAccessType access_type;
+
+      device_type device;
+      std::string actualPath = fileActualPath(filename, device);
+      //since it is a randomaccessfile, either it is an sst file or
+      //something not important
+      if (fileType == 1) {//SST //impossible
+        access_type = SST_Read;
+      } else {
+        access_type = WAL_Read;
+      }
+
+      if (device != SSD) {
+        is_pmem = true;
+      }
+
+      std::cout << "new random, access_type: " << access_type << ", is_pmem: " << is_pmem << ", actualPath: " << actualPath << std::endl;
+      fd = my_open(actualPath.c_str(), O_RDONLY, 0777, 
+        std::make_shared<Context>(access_type, is_pmem)
+      );
+    } else {
+      fd = open(filename.c_str(), O_RDONLY);
+    }
+    // int fd = ::open(filename.c_str(), O_RDONLY);
     if (fd < 0) {
       return PosixError(filename, errno);
     }
 
     if (!mmap_limiter_.Acquire() || filename.find("vlog") != std::string::npos) {
-      posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
+      //myposix
+      my_posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
+      // posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
       *result = new PosixRandomAccessFile(filename, fd, &fd_limiter_);
       return Status::OK();
     }
     uint64_t file_size;
     Status status = GetFileSize(filename, &file_size);
     if (status.ok()) {
+      //myposix
       void* mmap_base =
-          ::mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
+          my_mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
+      // void* mmap_base =
+      //     ::mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
       if (mmap_base != MAP_FAILED) {
         *result = new PosixMmapReadableFile(filename,
                                             reinterpret_cast<char*>(mmap_base),
@@ -566,14 +723,47 @@ class PosixEnv : public Env {
 
   // test use only
   void NewRandomAccessFileLearned(const std::string& filename, RandomAccessFile** result) {
-    int fd = ::open(filename.c_str(), O_RDONLY);
+    //myposix
+
+    int fileType = isSSTorWal(filename);
+    int fd;
+    if (fileType != 0) {
+
+      bool is_pmem = false;
+      FileAccessType access_type;
+
+      device_type device;
+      std::string actualPath = fileActualPath(filename, device);
+      //since it is a randomaccessfile, either it is an sst file or
+      //something not important
+      if (fileType == 1) {//SST //impossible
+        access_type = SST_Read;
+      } else {
+        access_type = WAL_Read;
+      }
+
+      if (device != SSD) {
+        is_pmem = true;
+      }
+
+      fd = my_open(actualPath.c_str(), O_RDONLY, 0777, 
+        std::make_shared<Context>(access_type, is_pmem)
+      );
+    } else {
+      fd = open(filename.c_str(), O_RDONLY);
+    }
+    // int fd = ::open(filename.c_str(), O_RDONLY);
+    
     //*result = new PosixRandomAccessFile(filename, fd, &fd_limiter_);
 
     uint64_t file_size;
     Status status = GetFileSize(filename, &file_size);
     if (status.ok()) {
+        //myposix
         void* mmap_base =
-                ::mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
+                my_mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
+        // void* mmap_base =
+        //         ::mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
         if (mmap_base != MAP_FAILED) {
             *result = new PosixMmapReadableFile(filename,
                                                 reinterpret_cast<char*>(mmap_base),
@@ -582,7 +772,9 @@ class PosixEnv : public Env {
             status = PosixError(filename, errno);
         }
     }
-    ::close(fd);
+    //myposix
+    my_close(fd);
+    // ::close(fd);
   }
 
 
@@ -593,15 +785,63 @@ class PosixEnv : public Env {
 
   Status NewWritableFile(const std::string& filename,
                          WritableFile** result) override {
-    int fd;
-    if (filename.find("vlog") != std::string::npos) {
-        fd = ::open(filename.c_str(), O_RDWR | O_APPEND | O_CREAT, 0644);
-    } else {
-        fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT, 0644);
-    }
 
-    int threadtype = getThreadType(pthread_self());
-    std::cout << "PosixWritableFile opened, threadtype: "<<threadtype << "ID: "<< pthread_self()<< std::endl;
+                          int threadtype = getThreadType(pthread_self());
+    //myposix
+    int fileType = isSSTorWal(filename);
+    int fd;
+    if (fileType != 0) {
+
+      bool is_pmem = false;
+      FileAccessType access_type;
+
+      Context *ctx;
+      device_type device;
+      std::string actualPath = fileActualPath(filename, device);
+
+      //since it is a writable, either it is an sst file or
+      //a wal writable file
+      if (fileType == 1) {//SST
+        access_type = SST_Write;
+      } else { //WAL
+        access_type = WAL_Write;
+      }
+
+      if (device != SSD) {
+        is_pmem = true;
+      }
+
+      if(filename.find("ldb") != std::string::npos){
+        std::cout << "ldb filename : actualpath : is_pmem" << filename << " "<< actualPath << is_pmem << std::endl;
+      }
+
+      if (filename.find("vlog") != std::string::npos) {
+        fd = my_open(actualPath.c_str(), O_RDWR | O_APPEND | O_CREAT, 0644, 
+          std::make_shared<Context>(access_type, is_pmem)
+        );
+      } else {
+        fd = my_open(actualPath.c_str(), O_TRUNC | O_WRONLY | O_CREAT, 0644, 
+          std::make_shared<Context>(access_type, is_pmem)
+        );
+      }
+    } else {
+      if (filename.find("vlog") != std::string::npos) {
+          fd = ::open(filename.c_str(), O_RDWR | O_APPEND | O_CREAT, 0644);
+      } else {
+          fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT, 0644);
+      }
+    }
+    // int fd;
+    // if (filename.find("vlog") != std::string::npos) {
+    // 
+    //     fd = ::open(filename.c_str(), O_RDWR | O_APPEND | O_CREAT, 0644);
+    // } else {
+    // 
+    //     fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT, 0644);
+    // }
+
+    // threadtype = getThreadType(pthread_self());
+    // std::cout << "PosixWritableFile " << filename << " opened, threadtype: "<<threadtype << "ID: "<< pthread_self()<< std::endl;
 
     if (fd < 0) {
       *result = nullptr;
@@ -614,7 +854,37 @@ class PosixEnv : public Env {
 
   Status NewAppendableFile(const std::string& filename,
                            WritableFile** result) override {
-    int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644);
+    //myposix
+    int fileType = isSSTorWal(filename);
+    int fd;
+    if (fileType != 0) {
+
+      bool is_pmem = false;
+      FileAccessType access_type;
+
+      Context *ctx;
+      device_type device;
+      std::string actualPath = fileActualPath(filename, device);
+
+      //since it is a writable, either it is an sst file or
+      //a wal writable file
+      if (fileType == 1) {//SST
+        access_type = SST_Write;
+      } else { //WAL
+        access_type = WAL_Write;
+      }
+
+      if (device != SSD) {
+        is_pmem = true;
+      }
+
+      fd = my_open(actualPath.c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644, 
+        std::make_shared<Context>(access_type, is_pmem)
+      );
+    } else {
+      fd = open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644);
+    }
+    // int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644);
     if (fd < 0) {
       *result = nullptr;
       return PosixError(filename, errno);
@@ -625,9 +895,26 @@ class PosixEnv : public Env {
   }
 
   bool FileExists(const std::string& filename) override {
+    //myposix no need to do the access call according to ruben, we could just leave it here
     return ::access(filename.c_str(), F_OK) == 0;
   }
 
+  //myposix 
+  //funstion receives a folder path. If the path contains db_first_ return true and the string after it in a parameter. 
+  // Otherwise, return false.
+  bool get_kvstore_after_path_v2(std::string path, std::string& after) {
+      std::string db_first_ = getSSDPath();
+      size_t pos = path.find(db_first_);
+      if (pos == std::string::npos) {
+          return false;
+      }
+      after = path.substr(pos + db_first_.length());
+      return true;
+  }
+
+  //this function needs to be remplemented here, since there's no way
+  //to make opendir return the content of two DIRs
+  //myposix?
   Status GetChildren(const std::string& directory_path,
                      std::vector<std::string>* result) override {
     result->clear();
@@ -639,18 +926,58 @@ class PosixEnv : public Env {
     while ((entry = ::readdir(dir)) != nullptr) {
       result->emplace_back(entry->d_name);
     }
+    //do the same but for the redirected folder, if it exists
+    std::string after;
+    if (get_kvstore_after_path_v2(directory_path, after)) {
+      std::string db_second_= getNVMMPath();
+      std::string redirected_dir = db_second_ + after;
+      DIR* d2 = opendir(redirected_dir.c_str());
+      if (d2 == nullptr) {
+        switch (errno) {
+          case EACCES:
+          case ENOENT:
+          case ENOTDIR:
+            break;
+          default:
+            break;
+        }
+      } else {
+        struct dirent* entry2;
+        while ((entry2 = readdir(d2)) != nullptr) {
+          //if d_name is not . or ..
+          if (strcmp(entry2->d_name, ".") != 0 && strcmp(entry2->d_name, "..") != 0) {
+            result->push_back(entry2->d_name);
+          }
+          // result->push_back(entry2->d_name);
+        }
+      }
+      closedir(d2);
+    }
     ::closedir(dir);
     return Status::OK();
   }
 
   Status DeleteFile(const std::string& filename) override {
-    if (::unlink(filename.c_str()) != 0) {
-      return PosixError(filename, errno);
+    //myposix
+    device_type device;
+    std::string actualPath = fileActualPath(filename, device);
+    bool is_pmem = false;
+    Context* ctx;
+
+    if (device != SSD) {
+      is_pmem = true;
     }
+
+    if (my_unlink(actualPath.c_str(),std::make_shared<Context>(ACCESSOR_OTHER, is_pmem)) != 0) {
+      return PosixError(actualPath, errno);
+    }
+
     return Status::OK();
   }
 
   Status CreateDir(const std::string& dirname) override {
+    //std::cout << "Creating Directory " << dirname << std::endl;
+    //myposix? solution: manually create directory in pmem, check how many directory it's creating
     if (::mkdir(dirname.c_str(), 0755) != 0) {
       return PosixError(dirname, errno);
     }
@@ -658,6 +985,7 @@ class PosixEnv : public Env {
   }
 
   Status DeleteDir(const std::string& dirname) override {
+    //myposix? could be pass
     if (::rmdir(dirname.c_str()) != 0) {
       return PosixError(dirname, errno);
     }
@@ -666,7 +994,10 @@ class PosixEnv : public Env {
 
   Status GetFileSize(const std::string& filename, uint64_t* size) override {
     struct ::stat file_stat;
-    if (::stat(filename.c_str(), &file_stat) != 0) {
+    //myposix?
+    device_type device;
+    std::string actualPath = fileActualPath(filename, device);
+    if (::stat(actualPath.c_str(), &file_stat) != 0) {
       *size = 0;
       return PosixError(filename, errno);
     }
@@ -675,6 +1006,7 @@ class PosixEnv : public Env {
   }
 
   Status RenameFile(const std::string& from, const std::string& to) override {
+    //myposix? maybe no need to deal with it (prob it's the manifest file)
     if (std::rename(from.c_str(), to.c_str()) != 0) {
       return PosixError(from, errno);
     }
@@ -684,19 +1016,22 @@ class PosixEnv : public Env {
   Status LockFile(const std::string& filename, FileLock** lock) override {
     *lock = nullptr;
 
+    //myposix? leave it here
     int fd = ::open(filename.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
       return PosixError(filename, errno);
     }
 
     if (!locks_.Insert(filename)) {
-      ::close(fd);
+      //myposix
+      my_close(fd);
       return Status::IOError("lock " + filename, "already held by process");
     }
 
     if (LockOrUnlock(fd, true) == -1) {
       int lock_errno = errno;
-      ::close(fd);
+      //myposix
+      my_close(fd);
       locks_.Remove(filename);
       return PosixError("lock " + filename, lock_errno);
     }
@@ -711,7 +1046,8 @@ class PosixEnv : public Env {
       return PosixError("unlock " + posix_file_lock->filename(), errno);
     }
     locks_.Remove(posix_file_lock->filename());
-    ::close(posix_file_lock->fd());
+    //myposix
+    my_close(posix_file_lock->fd());
     delete posix_file_lock;
     return Status::OK();
   }
@@ -740,6 +1076,7 @@ class PosixEnv : public Env {
   }
 
   Status NewLogger(const std::string& filename, Logger** result) override {
+    //myposix? could be skipped 
     std::FILE* fp = std::fopen(filename.c_str(), "w");
     if (fp == nullptr) {
       *result = nullptr;

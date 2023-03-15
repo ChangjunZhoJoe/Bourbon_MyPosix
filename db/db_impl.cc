@@ -157,7 +157,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)),
       version_count(0) {
-        std::cout <<"DBImpl constructor, thread:  "<<pthread_self()<<std::endl;
+        //std::cout <<"DBImpl constructor, thread:  "<<pthread_self()<<std::endl;
         adgMod::db = this;
         vlog = new adgMod::VLog(dbname_ + "/vlog.txt");
       }
@@ -733,7 +733,7 @@ void DBImpl::RecordBackgroundError(const Status& s) {
 }
 
 void DBImpl::MaybeScheduleCompaction() {
-  std::cout <<"MaybeScheduleCompaction, thread:  "<<pthread_self()<<std::endl;
+  //std::cout <<"MaybeScheduleCompaction, thread:  "<<pthread_self()<<std::endl;
   mutex_.AssertHeld();
   if (background_compaction_scheduled_) {
     // Already scheduled
@@ -785,7 +785,7 @@ void DBImpl::BackgroundCompaction() {
 
   if (imm_ != nullptr) {
     registerThread(pthread_self(),THREAD_FLUSH);
-    std::cout <<"registered flush thread "<<pthread_self()<<std::endl;
+    //std::cout <<"myposix: registered flush thread "<<pthread_self()<<std::endl;
     int level = CompactMemTable();
     instance->PauseTimer(7);
     return;
@@ -843,7 +843,7 @@ void DBImpl::BackgroundCompaction() {
   } else {
     CompactionState* compact = new CompactionState(c);
     registerStartCompaction(pthread_self(),c->level());
-    std::cout <<"registered compaction thread "<<pthread_self()<<std::endl;
+    //std::cout <<"myposix: registered compaction thread "<<pthread_self()<<std::endl;
     status = DoCompactionWork(compact);
     if (!status.ok()) {
       RecordBackgroundError(status);
@@ -1720,6 +1720,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   // Recover handles create_if_missing, error_if_exists
   bool save_manifest = false;
   Status s = impl->Recover(&edit, &save_manifest);
+  assert(status.ok() && "Recover Error");
   if (s.ok() && impl->mem_ == nullptr) {
     // Create new log and a corresponding memtable.
     uint64_t new_log_number = impl->versions_->NewFileNumber();
