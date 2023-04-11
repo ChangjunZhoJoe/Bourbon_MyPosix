@@ -1,3 +1,5 @@
+env_posix.cc
+
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -58,6 +60,8 @@ constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 65536 : 0;
 // Can be set using EnvPosixTestHelper::SetReadOnlyMMapLimit.
 int g_mmap_limit = kDefaultMmapLimit;
 
+
+
 constexpr const size_t kWritableFileBufferSize = 65536;
 
 Status PosixError(const std::string& context, int error_number) {
@@ -115,7 +119,7 @@ class PosixSequentialFile final : public SequentialFile {
             int threadtype = getThreadType(pthread_self());
             //std::cout << "My_Posix: In function PosixSequentialFile Constructor, getThreadType return "<<threadtype <<"ID: "<< pthread_self()<< std::endl;
       }
-  ~PosixSequentialFile() override { close(fd_); }
+  ~PosixSequentialFile() override { my_close(fd_); }
 
   Status Read(size_t n, Slice* result, char* scratch) override {
 
@@ -171,14 +175,14 @@ class PosixRandomAccessFile final : public RandomAccessFile {
         filename_(std::move(filename)) {
     if (!has_permanent_fd_) {
       assert(fd_ == -1);
-      ::close(fd);  // The file will be opened on every read.
+      my_close(fd);  // The file will be opened on every read.
     }
   }
 
   ~PosixRandomAccessFile() override {
     if (has_permanent_fd_) {
       assert(fd_ != -1);
-      ::close(fd_);
+      my_close(fd_);
       fd_limiter_->Release();
     }
   }
@@ -278,7 +282,7 @@ class PosixMmapReadableFile final : public RandomAccessFile {
         filename_(std::move(filename)) {}
 
   ~PosixMmapReadableFile() override {
-    ::munmap(static_cast<void*>(mmap_base_), length_);
+    // ::munmap(static_cast<void*>(mmap_base_), length_);
     mmap_limiter_->Release();
   }
 
@@ -676,7 +680,11 @@ class PosixEnv : public Env {
         is_pmem = true;
       }
 
-      std::cout << "new random, access_type: " << access_type << ", is_pmem: " << is_pmem << ", actualPath: " << actualPath << std::endl;
+      if(filename.find("ldb") != std::string::npos){
+        std::cout << "ldb filename-read: " << filename << " actualPath: "<< actualPath << " isPmem: "<<is_pmem<< std::endl;
+      }
+
+      // std::cout << "new random, access_type: " << access_type << ", is_pmem: " << is_pmem << ", actualPath: " << actualPath << std::endl;
       fd = my_open(actualPath.c_str(), O_RDONLY, 0777, 
         std::make_shared<Context>(access_type, is_pmem)
       );
@@ -812,7 +820,11 @@ class PosixEnv : public Env {
       }
 
       if(filename.find("ldb") != std::string::npos){
-        std::cout << "ldb filename : actualpath : is_pmem" << filename << " "<< actualPath << is_pmem << std::endl;
+        std::cout << "ldb filename: " << filename << " actualPath: "<< actualPath << " isPmem: "<<is_pmem<< std::endl;
+      }
+
+      if(filename.find("log") != std::string::npos){
+        std::cout << "log filename: " << filename << " actualPath: "<< actualPath << " isPmem: "<<is_pmem<< std::endl;
       }
 
       if (filename.find("vlog") != std::string::npos) {
@@ -820,6 +832,9 @@ class PosixEnv : public Env {
           std::make_shared<Context>(access_type, is_pmem)
         );
       } else {
+        if(actualPath == "/home/gsd/ruben/kvs-nvme/kvstore_mix/004866.ldb"){
+          std::cout << "=== actualPath : is_pmem" << actualPath << is_pmem << std::endl;
+        }
         fd = my_open(actualPath.c_str(), O_TRUNC | O_WRONLY | O_CREAT, 0644, 
           std::make_shared<Context>(access_type, is_pmem)
         );
@@ -895,6 +910,7 @@ class PosixEnv : public Env {
   }
 
   bool FileExists(const std::string& filename) override {
+    std::cout << "FileExists: " << filename << std::endl;
     //myposix no need to do the access call according to ruben, we could just leave it here
     return ::access(filename.c_str(), F_OK) == 0;
   }
@@ -958,6 +974,7 @@ class PosixEnv : public Env {
   }
 
   Status DeleteFile(const std::string& filename) override {
+    std::cout << "deleting file "<< filename << std::endl;
     //myposix
     device_type device;
     std::string actualPath = fileActualPath(filename, device);
@@ -1007,6 +1024,7 @@ class PosixEnv : public Env {
 
   Status RenameFile(const std::string& from, const std::string& to) override {
     //myposix? maybe no need to deal with it (prob it's the manifest file)
+    std::cout << "Renaming file " << from << " to " << to << std::endl;
     if (std::rename(from.c_str(), to.c_str()) != 0) {
       return PosixError(from, errno);
     }

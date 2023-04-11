@@ -1,3 +1,6 @@
+db_impl.cc
+
+
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -785,7 +788,7 @@ void DBImpl::BackgroundCompaction() {
 
   if (imm_ != nullptr) {
     registerThread(pthread_self(),THREAD_FLUSH);
-    //std::cout <<"myposix: registered flush thread "<<pthread_self()<<std::endl;
+    std::cout <<"myposix: registered flush thread "<<pthread_self()<<std::endl;
     int level = CompactMemTable();
     instance->PauseTimer(7);
     return;
@@ -842,8 +845,9 @@ void DBImpl::BackgroundCompaction() {
         status.ToString().c_str(), versions_->LevelSummary(&tmp));
   } else {
     CompactionState* compact = new CompactionState(c);
-    registerStartCompaction(pthread_self(),c->level());
-    //std::cout <<"myposix: registered compaction thread "<<pthread_self()<<std::endl;
+    // registerThread(pthread_self(),THREAD_COMP_L1);
+    registerStartCompaction(pthread_self(),c->level()+1);
+    std::cout <<"myposix: registered compaction level "<<c->level()+1<<std::endl;
     status = DoCompactionWork(compact);
     if (!status.ok()) {
       RecordBackgroundError(status);
