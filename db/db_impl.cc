@@ -785,7 +785,7 @@ void DBImpl::BackgroundCompaction() {
 
   if (imm_ != nullptr) {
     registerThread(pthread_self(),THREAD_FLUSH);
-    //std::cout <<"myposix: registered flush thread "<<pthread_self()<<std::endl;
+    std::cout <<"myposix: registered flush thread "<<pthread_self()<<std::endl;
     int level = CompactMemTable();
     instance->PauseTimer(7);
     return;
@@ -843,7 +843,7 @@ void DBImpl::BackgroundCompaction() {
   } else {
     CompactionState* compact = new CompactionState(c);
     registerStartCompaction(pthread_self(),c->level());
-    //std::cout <<"myposix: registered compaction thread "<<pthread_self()<<std::endl;
+    std::cout <<"myposix: registered compaction thread "<<pthread_self()<< " level: "<< c->level()<<std::endl;
     status = DoCompactionWork(compact);
     if (!status.ok()) {
       RecordBackgroundError(status);

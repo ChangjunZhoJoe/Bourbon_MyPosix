@@ -44,8 +44,7 @@ that we **strongly** encourage you to write your own application to run your exp
 
 -f: the path to the dataset. The dataset file should contain one key per line.
 
--d: the path to the database. If with "-w" mode, this directory will be created or cleaned if
-    already exists.
+-d: the path to the database. If with "-w" mode, this directory will be created or cleaned if already exists.
 
 --distribution: the path to the request distribution file. A distribution file should contain
     one number "x" per line which indicate the x-th key in the dataset file
@@ -98,6 +97,9 @@ cmake /data/czhou/Bourbon -DCMAKE_BUILD_TYPE=DEBUG \
     -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
 make -j
 ```
+
+
+sudo ./read_cold -f /data/czhou/Bourbon/testdatasets/keyfile.txt -k 16 -v 1024 -d /mnt/nvme2n1_nobackup/kvstore -u -n 95310 --change_level_load --YCSB /data/czhou/Bourbon/testdatasets/ycsbworkload.txt -i 1 -m 8
 
 
 Questions?

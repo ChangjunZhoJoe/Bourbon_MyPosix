@@ -401,7 +401,12 @@ int main(int argc, char *argv[]) {
                         status = db->Put(write_options, generate_key(to_string(10000000000 + index)), {values.data() + uniform_dist_value(e3), (uint64_t) adgMod::value_size});
                     } else {
                         // other write
+                        // cout << index << " puting " << keys[index]<< endl;
                         status = db->Put(write_options, keys[index], {values.data() + uniform_dist_value(e3), (uint64_t) adgMod::value_size});
+                    }
+                    if (!status.ok()) {
+                        cout << index << " puting failed " << keys[index] << " error: "<< status.ToString() << endl;
+                        //assert(status.ok() && "File Get Error");
                     }
                     instance->PauseTimer(10);
                     assert(status.ok() && "Mix Put Error");
@@ -434,7 +439,7 @@ int main(int argc, char *argv[]) {
 
                     //cout << "Get " << key << " : " << value << endl;
                     if (!status.ok()) {
-                        cout << key << " Not Found" << endl;
+                        cout << index << " "<< key << " Not Found" << endl;
                         //assert(status.ok() && "File Get Error");
                     }
                 }
